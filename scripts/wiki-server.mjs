@@ -182,32 +182,46 @@ function 主机合法(req, 服务器端口) {
 
 const 词条字段 = ['slug', 'tags', 'usage', 'origin', 'other', 'summary', 'aliases']
 
-/** 摘要留空时的兜底：从「怎么用 / 出处 / 其他」里截第一段，纯本地规则，不调模型 */
+/**
+ * 摘要留空时的兜底：照梗维基卡片的样子拼——先「来源」，再「用法」，再其他小节，
+ * 带 `## 小节` 标记，超长按句子/换行截断加「…」。纯本地规则，不调模型。
+ */
 function 自动摘要(体) {
-  const 首段 = (文) => {
-    const 块 = String(文 || '').split(/\n{2,}/).map((x) => x.trim()).filter(Boolean)
-    for (const b of 块) {
-      const 行 = b.split('\n').map((x) => x.trim()).filter(Boolean)
-        .map((x) => x.replace(/^[-*+]\s+/, '').replace(/^#+\s*/, '').trim())
-        .filter(Boolean)
-      if (!行.length) continue
-      // other 的每块第一行可能是「演化」这种小节名，太短就取下一行
-      if (行.length > 1 && 行[0].length < 8) return 行[1]
-      return 行[0]
-    }
-    return ''
+  const 段 = []
+  const 来源 = 洗净(体.origin)
+  const 用法 = 洗净(体.usage)
+  if (来源) 段.push({ 标题: '来源', 内容: 来源 })
+  if (用法) 段.push({ 标题: '用法', 内容: 用法 })
+
+  // other：同步脚本存的是「小节名\n内容」块（空行分隔）；老词条可能只有一段正文，没有小节名
+  for (const 块 of String(体.other || '').split(/\n{2,}/)) {
+    const 行们 = 块.split('\n').map((x) => x.trim()).filter(Boolean)
+    if (!行们.length) continue
+    const 首行像标题 = 行们.length > 1 && 行们[0].length <= 12 && !/[。！？；]/.test(行们[0])
+    const 标题 = 首行像标题 ? 行们[0] : ''
+    const 内容 = 洗净((首行像标题 ? 行们.slice(1) : 行们).join('\n'))
+    if (!内容) continue
+    段.push({ 标题, 内容 })
   }
-  let 文本 = 首段(体.usage) || 首段(体.origin) || 首段(体.other) || ''
-  文本 = 文本.replace(/\s+/g, ' ').trim()
-  if (!文本) return ''
-  const 上限 = 200
+  if (!段.length) return ''
+
+  const 拼 = 段
+    .map((s) => (s.标题 ? '## ' + s.标题 + '\n\n' + s.内容 : s.内容))
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return 截断摘要(拼, 200)
+}
+
+/** 超长就按句号/换行断，找不到断点就硬截；结尾统一加「…」 */
+function 截断摘要(文本, 上限) {
   if (文本.length <= 上限) return 文本
   const 区段 = 文本.slice(0, 上限)
   const 断点 = Math.max(
-    区段.lastIndexOf('。'), 区段.lastIndexOf('！'), 区段.lastIndexOf('？'), 区段.lastIndexOf('；'),
+    区段.lastIndexOf('。'), 区段.lastIndexOf('！'), 区段.lastIndexOf('？'), 区段.lastIndexOf('\n'),
   )
-  if (断点 >= 100) return 文本.slice(0, 断点 + 1)
-  return 文本.slice(0, 上限) + '…'
+  if (断点 >= 120) return 文本.slice(0, 断点 + 1).trimEnd() + '…'
+  return 文本.slice(0, 上限).trimEnd() + '…'
 }
 
 /** 关键词跟着词条走：传了就以传的为准（空则删掉），没传就保留；改标题时一起搬 */

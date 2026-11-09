@@ -699,10 +699,10 @@ function 渲染抽屉(v, 新) {
     字段('f-tags', '标签', v.tags, '逗号或顿号隔开') +
     '<div class="form-field">' +
       '<div class="row" style="justify-content:space-between;align-items:baseline">' +
-        '<label for="f-summary" style="margin:0">摘要<span class="muted" style="font-weight:400"> · 留空保存时自动从「怎么用 / 出处」截一段</span></label>' +
+        '<label for="f-summary" style="margin:0">摘要<span class="muted" style="font-weight:400"> · 留空保存时按「来源 → 用法 → 其他」自动拼（带 ## 小节）</span></label>' +
         '<button type="button" class="btn sm ghost" id="f-autosum">自动生成</button>' +
       '</div>' +
-      '<textarea class="textarea" id="f-summary" rows="3" placeholder="留空就行，保存时自动生成">' + esc(v.summary) + '</textarea>' +
+      '<textarea class="textarea" id="f-summary" rows="3" placeholder="留空就行，保存时照梗维基卡片的样子自动拼">' + esc(v.summary) + '</textarea>' +
     '</div>' +
     字段('f-usage', '怎么用 / 怎么接', v.usage, '模型优先看这一段', 7) +
     字段('f-origin', '出处 / 来历', v.origin, '', 7) +
