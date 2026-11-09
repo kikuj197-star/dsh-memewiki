@@ -76,6 +76,11 @@ function 开库() {
       site_updated_at TEXT,
       checked_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS meme_keywords (
+      title TEXT PRIMARY KEY,
+      keywords TEXT,
+      fetched_at TEXT
+    );
   `)
   return 连接
 }
@@ -250,10 +255,11 @@ function 补别名(体) {
 
 const 过滤条件 = {
   全部: '',
-  无别名: "(aliases IS NULL OR TRIM(aliases) = '')",
-  有别名: "(aliases IS NOT NULL AND TRIM(aliases) <> '')",
-  多别名: "(aliases IS NOT NULL AND (LENGTH(aliases) - LENGTH(REPLACE(aliases, ',', ''))) >= 1)",
-  有改动: 'title IN (SELECT title FROM meme_pending WHERE status = \'pending\')',
+  无别名: "(m.aliases IS NULL OR TRIM(m.aliases) = '')",
+  有别名: "(m.aliases IS NOT NULL AND TRIM(m.aliases) <> '')",
+  多别名: "(m.aliases IS NOT NULL AND (LENGTH(m.aliases) - LENGTH(REPLACE(m.aliases, ',', ''))) >= 1)",
+  有改动: "m.title IN (SELECT title FROM meme_pending WHERE status = 'pending')",
+  有关键词: "(k.keywords IS NOT NULL AND TRIM(k.keywords) <> '')",
 }
 
 function 列表(参数表) {
@@ -269,15 +275,19 @@ function 列表(参数表) {
   const f = 过滤条件[过滤]
   if (f) 条件们.push(f)
   if (q) {
-    条件们.push('(title LIKE ? OR aliases LIKE ? OR tags LIKE ? OR summary LIKE ? OR usage LIKE ?)')
-    for (let i = 0; i < 5; i++) 值.push(`%${q}%`)
+    条件们.push('(m.title LIKE ? OR m.aliases LIKE ? OR m.tags LIKE ? OR m.summary LIKE ? OR m.usage LIKE ? OR k.keywords LIKE ?)')
+    for (let i = 0; i < 6; i++) 值.push(`%${q}%`)
   }
   const where = 条件们.length ? 'WHERE ' + 条件们.join(' AND ') : ''
-  const order = 排序 === 'alias' ? "ORDER BY (aliases IS NULL OR TRIM(aliases) = '') ASC, title" : 'ORDER BY title'
+  const 连表 = 'FROM memes m LEFT JOIN meme_keywords k ON k.title = m.title'
+  const order = 排序 === 'alias'
+    ? "ORDER BY (m.aliases IS NULL OR TRIM(m.aliases) = '') ASC, m.title"
+    : 'ORDER BY m.title'
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM memes ${where}`).get(...值).n
+  const total = db.prepare(`SELECT COUNT(*) AS n ${连表} ${where}`).get(...值).n
   const 行们 = db.prepare(
-    `SELECT title, slug, tags, summary, aliases FROM memes ${where} ${order} LIMIT ? OFFSET ?`,
+    `SELECT m.title, m.slug, m.tags, m.summary, m.aliases, COALESCE(k.keywords, '') AS keywords
+     ${连表} ${where} ${order} LIMIT ? OFFSET ?`,
   ).all(...值, limit, offset)
 
   const 待审 = new Set(db.prepare("SELECT title FROM meme_pending WHERE status = 'pending'").all().map((r) => r.title))
@@ -287,6 +297,7 @@ function 列表(参数表) {
     tags: r.tags || '',
     summary: r.summary || '',
     aliases: r.aliases || '',
+    关键词: 拆分列表(r.keywords),
     别名数: 拆分列表(r.aliases).length,
     待审核: 待审.has(r.title),
   }))
@@ -341,13 +352,21 @@ function 待审列表(参数表) {
     const 本地别名 = 拆分列表(本地 && 本地.aliases)
     const 站点别名 = 拆分列表(行.aliases)
     const 并集 = [...new Set([...本地别名, ...站点别名])]
+    // 关键词优先用这次抓到的站点版本；没有就退回同步时存的那份
+    let 关键词 = 拆分列表(行.keywords)
+    if (!关键词.length) {
+      try {
+        const kw = db.prepare('SELECT keywords FROM meme_keywords WHERE title = ?').get(行.title)
+        关键词 = 拆分列表(kw && kw.keywords)
+      } catch { /* 老库没有关键词表 */ }
+    }
     return {
       title: 行.title,
       slug: 行.slug,
       status: 行.status,
       site_updated_at: 行.site_updated_at,
       detected_at: 行.detected_at,
-      keywords: 拆分列表(行.keywords),
+      keywords: 关键词,
       local: 本地 ? {
         tags: 本地.tags || '', usage: 本地.usage || '', origin: 本地.origin || '',
         other: 本地.other || '', summary: 本地.summary || '', aliases: 本地.aliases || '',
@@ -556,6 +575,10 @@ function 状态总览() {
   const 待审 = db.prepare("SELECT COUNT(*) AS n FROM meme_pending WHERE status = 'pending'").get().n
   const 已合并 = db.prepare("SELECT COUNT(*) AS n FROM meme_pending WHERE status = 'applied'").get().n
   const 已忽略 = db.prepare("SELECT COUNT(*) AS n FROM meme_pending WHERE status = 'rejected'").get().n
+  let 有关键词 = 0
+  try {
+    有关键词 = db.prepare("SELECT COUNT(*) AS n FROM meme_keywords WHERE keywords IS NOT NULL AND TRIM(keywords) <> ''").get().n
+  } catch { /* 老库没有关键词表 */ }
   let 大小 = 0
   try { 大小 = statSync(词库文件).size } catch { /* ignore */ }
   return {
@@ -569,6 +592,7 @@ function 状态总览() {
     待审,
     已合并,
     已忽略,
+    有关键词,
     builtAt: 读元信息('built_at'),
     checkedAt: 读元信息('checked_at'),
     db: 词库文件,
@@ -581,9 +605,13 @@ function 状态总览() {
 function 导出(参数表) {
   const db = 开库()
   const 格式 = String(参数表.get('format') || 'json')
-  const 行们 = db.prepare('SELECT title, slug, tags, usage, origin, other, summary, aliases FROM memes ORDER BY title').all()
+  const 行们 = db.prepare(
+    `SELECT m.title, m.slug, m.tags, m.usage, m.origin, m.other, m.summary, m.aliases,
+            COALESCE(k.keywords, '') AS keywords
+     FROM memes m LEFT JOIN meme_keywords k ON k.title = m.title ORDER BY m.title`,
+  ).all()
   if (格式 === 'csv') {
-    const 头 = ['title', 'slug', 'tags', 'usage', 'origin', 'other', 'summary', 'aliases']
+    const 头 = ['title', 'slug', 'tags', 'usage', 'origin', 'other', 'summary', 'aliases', 'keywords']
     const 转义 = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
     const 文 = '\uFEFF' + [头.join(',')].concat(行们.map((r) => 头.map((k) => 转义(r[k])).join(','))).join('\r\n')
     return { 类型: 'text/csv; charset=utf-8', 文, 文件名: `memes-${现在文本().replace(/[: ]/g, '-')}.csv` }
@@ -647,9 +675,11 @@ const 服务器 = createServer(async (req, res) => {
     if (方法 === 'GET' && 路由 === '/get') {
       const t = String(u.searchParams.get('title') || '').trim()
       if (!t) return 发JSON(res, 400, { ok: false, error: '缺 title' })
-      const row = 开库().prepare('SELECT * FROM memes WHERE title = ?').get(t)
+      const db = 开库()
+      const row = db.prepare('SELECT * FROM memes WHERE title = ?').get(t)
       if (!row) return 发JSON(res, 404, { ok: false, error: '没有这个词条' })
-      return 发JSON(res, 200, { ok: true, item: row })
+      const kw = db.prepare('SELECT keywords FROM meme_keywords WHERE title = ?').get(t)
+      return 发JSON(res, 200, { ok: true, item: row, keywords: 拆分列表(kw && kw.keywords) })
     }
     if (方法 === 'GET' && 路由 === '/alias-queue') {
       const db = 开库()
@@ -671,13 +701,17 @@ const 服务器 = createServer(async (req, res) => {
         用法: String(r.usage || '').slice(0, 220),
         aliases: r.aliases || '',
       }))
-      // 站点关键词（有改动待审的才有）——可以一键加成别名
+      // 站点关键词（同步时从列表接口收下来的）——点一下就能加进别名
       const 关键词 = {}
       try {
+        for (const r of db.prepare("SELECT title, keywords FROM meme_keywords WHERE keywords IS NOT NULL AND TRIM(keywords) <> ''").all()) {
+          关键词[r.title] = 拆分列表(r.keywords)
+        }
+        // 待审核区里的更新鲜，盖掉表里的
         for (const r of db.prepare("SELECT title, keywords FROM meme_pending WHERE status = 'pending' AND keywords <> ''").all()) {
           关键词[r.title] = 拆分列表(r.keywords)
         }
-      } catch { /* ignore */ }
+      } catch { /* 老库没有关键词表 */ }
       return 发JSON(res, 200, { ok: true, total, items, 关键词 })
     }
     if (方法 === 'POST' && 路由 === '/save') {

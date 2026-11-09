@@ -127,7 +127,7 @@ async function 载入列表() {
   if (列表.busy) return
   列表.busy = true
   const 体 = $('#list-body')
-  体.innerHTML = '<tr><td colspan="5" class="empty">读着…</td></tr>'
+  体.innerHTML = '<tr><td colspan="6" class="empty">读着…</td></tr>'
   try {
     const d = await 取JSON('/list?q=' + encodeURIComponent(列表.q) +
       '&filter=' + encodeURIComponent(列表.filter) +
@@ -136,7 +136,7 @@ async function 载入列表() {
     列表.total = d.total
     渲染列表(d)
   } catch (e) {
-    体.innerHTML = '<tr><td colspan="5" class="empty">读列表失败：' + esc(e.message) + '</td></tr>'
+    体.innerHTML = '<tr><td colspan="6" class="empty">读列表失败：' + esc(e.message) + '</td></tr>'
   } finally {
     列表.busy = false
   }
@@ -145,7 +145,7 @@ async function 载入列表() {
 function 渲染列表(d) {
   const 体 = $('#list-body')
   if (!d.items.length) {
-    体.innerHTML = '<tr><td colspan="5" class="empty">' +
+    体.innerHTML = '<tr><td colspan="6" class="empty">' +
       (列表.q ? '没搜到「' + esc(列表.q) + '」' : '这个词库还是空的') + '</td></tr>'
     $('#list-pager').innerHTML = ''
     return
@@ -154,6 +154,14 @@ function 渲染列表(d) {
     const 别名们 = String(it.aliases || '').split(',').filter(Boolean)
     const 别名文 = 别名们.slice(0, 6).map(esc).join('，') +
       (别名们.length > 6 ? ' <span class="muted">…共 ' + 别名们.length + ' 个</span>' : '')
+    const 关键词 = Array.isArray(it.关键词) ? it.关键词 : []
+    const 全部词 = 关键词.join('、')
+    const 关键词文 = 关键词.length
+      ? '<div class="kw-list">' +
+          关键词.slice(0, 3).map((k) => '<span class="kw" title="' + esc(全部词) + '">' + esc(k) + '</span>').join('') +
+          (关键词.length > 3 ? '<span class="kw more" title="' + esc(全部词) + '">+' + (关键词.length - 3) + '</span>' : '') +
+        '</div>'
+      : '<span class="muted">—</span>'
     return '<tr data-title="' + esc(it.title) + '">' +
       '<td class="title-cell" data-act="edit">' + esc(it.title) +
         (it.待审核 ? ' <span class="badge accent" title="站点有改动待审核">待审</span>' : '') +
@@ -161,6 +169,7 @@ function 渲染列表(d) {
       '</td>' +
       '<td class="aliases' + (别名们.length ? '' : ' none') + '">' + (别名们.length ? 别名文 : '（空）') + '</td>' +
       '<td class="tagline">' + esc(it.tags) + '</td>' +
+      '<td>' + 关键词文 + '</td>' +
       '<td><div class="snippet">' + esc(it.summary || '（还没有摘要）') + '</div></td>' +
       '<td><div class="ops">' +
         '<button class="btn sm" data-act="edit">改</button>' +
@@ -226,7 +235,15 @@ function 渲染别名(d) {
           '<input class="input" data-alias-input placeholder="别名，逗号隔开：如 kskbl,康神" autocomplete="off" />' +
           '<button class="btn primary sm" data-act="save-alias">保存</button>' +
         '</div>' +
-        '<div class="hint">回车保存并跳到下一条；点上面的关键词可直接加进去</div>' +
+        (关键词.length
+          ? '<div class="row" style="margin-top:6px">' +
+              '<button class="btn sm ghost" data-act="all-kw" data-kws="' + esc(关键词.join(',')) + '">＋全部关键词（' + 关键词.length + '）</button>' +
+              '<span class="muted small">站点给的检索词，加了能提高命中率</span>' +
+            '</div>'
+          : '') +
+        '<div class="hint">回车保存并跳到下一条' +
+          (关键词.length ? '；上面的关键词点一下就加进去，也能「全部关键词」一把加' : '') +
+        '</div>' +
       '</div>' +
     '</div>'
   }).join('')
@@ -588,6 +605,7 @@ function 渲染状态页(s) {
     ['没有别名', 数字(s.无别名), '只能靠完整标题命中'],
     ['多个别名', 数字(s.多别名), '命中面更宽'],
     ['待审核改动', 数字(s.待审), '站点改过、等你合并'],
+    ['站点关键词', 数字(s.有关键词), '梗维基给的检索词，可加成别名'],
     ['已合并', 数字(s.已合并), '这次同步以来'],
     ['已忽略', 数字(s.已忽略), '站点再改会重新排队'],
   ]
@@ -628,7 +646,7 @@ function 开抽屉(标题) {
   $('#drawer').setAttribute('aria-hidden', 'false')
 
   const 数据 = 新
-    ? { title: '', 原标题: '', aliases: '', tags: '', usage: '', origin: '', summary: '', other: '', slug: '', isNew: true }
+    ? { title: '', 原标题: '', aliases: '', tags: '', usage: '', origin: '', summary: '', other: '', slug: '', isNew: true, 关键词: [] }
     : null
 
   const 完成 = (行) => {
@@ -645,6 +663,7 @@ function 开抽屉(标题) {
         usage: d.item.usage || '', origin: d.item.origin || '',
         summary: d.item.summary || '', other: d.item.other || '',
         slug: d.item.slug || '', isNew: false,
+        关键词: Array.isArray(d.keywords) ? d.keywords : [],
       })
     }).catch((e) => {
       $('#drawer-body').innerHTML = '<div class="empty">读不到：' + esc(e.message) + '</div>'
@@ -668,6 +687,18 @@ function 渲染抽屉(v, 新) {
       '<input class="input" id="f-title" value="' + esc(v.title) + '" autocomplete="off" />' +
     '</div>' +
     字段('f-aliases', '<b>别名</b>', v.aliases, '逗号隔开。群里的俗称、缩写、口头禅、谐音都填这里，查词命中靠它') +
+    (v.关键词 && v.关键词.length
+      ? '<div class="form-field">' +
+          '<label>站点关键词<span class="muted" style="font-weight:400"> · 梗维基给的检索词，点一下加进上面的别名</span></label>' +
+          '<div class="chips">' +
+            v.关键词.map((k) => '<button type="button" class="chip" data-kw="' + esc(k) + '">+ ' + esc(k) + '</button>').join('') +
+          '</div>' +
+          '<div class="row" style="margin-top:7px">' +
+            '<button type="button" class="btn sm ghost" id="f-allkw">全部加入别名</button>' +
+            '<span class="muted small">' + v.关键词.length + ' 个关键词</span>' +
+          '</div>' +
+        '</div>'
+      : '') +
     字段('f-tags', '标签', v.tags, '逗号或顿号隔开') +
     '<div class="form-field">' +
       '<label for="f-summary">摘要<span class="muted" style="font-weight:400"> · 列表里显示的一行解释</span></label>' +
@@ -708,6 +739,23 @@ function 渲染抽屉(v, 新) {
   for (const el of $$('#drawer-body input, #drawer-body textarea')) el.addEventListener('input', 检查脏)
   // 以规范化之后的值为基准，别因为别名的空格/去重被判成"改过"
   抽屉原值 = JSON.stringify(读值())
+
+  // 站点关键词：点一个加一个，或者一次全加
+  const 别名框 = $('#f-aliases')
+  const 加进别名 = (词) => {
+    if (!词) return
+    别名框.value = 规整别名([别名框.value, 词].filter(Boolean).join(','))
+    检查脏()
+  }
+  for (const b of $$('#drawer-body [data-kw]')) {
+    b.addEventListener('click', () => { 加进别名(b.dataset.kw); 别名框.focus() })
+  }
+  const 全加 = $('#f-allkw')
+  if (全加) 全加.addEventListener('click', () => {
+    for (const k of (v.关键词 || [])) 加进别名(k)
+    别名框.focus()
+    提示('关键词已加进别名，记得点保存')
+  })
 
   $('#f-save').addEventListener('click', async () => {
     const 值 = 读值()
@@ -825,6 +873,14 @@ function 绑定() {
       const 行 = 关键词.closest('.alias-row')
       const 输入 = $('[data-alias-input]', 行)
       输入.value = 规整别名([输入.value, 关键词.dataset.kw].filter(Boolean).join(','))
+      输入.focus()
+      return
+    }
+    const 全部关键词 = e.target.closest('[data-act="all-kw"]')
+    if (全部关键词) {
+      const 行 = 全部关键词.closest('.alias-row')
+      const 输入 = $('[data-alias-input]', 行)
+      输入.value = 规整别名([输入.value, 全部关键词.dataset.kws].filter(Boolean).join(','))
       输入.focus()
       return
     }
@@ -968,7 +1024,12 @@ function 绑定() {
 async function 启动() {
   绑定()
   await 刷新总览()
-  // 支持 /#alias、/#review、/#status 这种直链（也方便截图和贴给别人）
+  // 支持 /?q=xxx&filter=有关键词#list 这种直链（也方便截图和贴给别人）
+  try {
+    const 参 = new URLSearchParams(location.search)
+    if (参.get('q')) { 列表.q = 参.get('q'); $('#list-q').value = 列表.q; $('#list-clear').classList.remove('hidden') }
+    if (参.get('filter')) { 列表.filter = 参.get('filter'); $('#list-filter').value = 列表.filter }
+  } catch { /* ignore */ }
   切页签(location.hash.replace('#', '') || 'list', true)
   // 上次会话可能还在同步中：接着看进度
   try {

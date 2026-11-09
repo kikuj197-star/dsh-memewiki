@@ -135,8 +135,15 @@
   .hr { height: 1px; background: var(--line); margin: 14px 0; }
 
   /* ---------- 表格 ---------- */
-  .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-  table { width: 100%; border-collapse: collapse; }
+  .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 960px; }
+  .kw-list { display: flex; gap: 4px; flex-wrap: wrap; }
+  .kw {
+    font-size: 11px; line-height: 18px; padding: 0 7px; border-radius: 20px; background: var(--panel-2);
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .kw.more { background: transparent; border-style: dashed; }
   thead th {
     text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 14px;
     border-bottom: 1px solid var(--line); background: var(--panel-2); white-space: nowrap;
@@ -288,6 +295,7 @@
         <option value="无别名">只看没别名的</option>
         <option value="有别名">只看有别名的</option>
         <option value="多别名">多个别名（命中面宽）</option>
+        <option value="有关键词">有站点关键词</option>
         <option value="有改动">站点有改动待审核</option>
       </select>
       <select class="select" id="list-sort" style="width:auto">
@@ -300,14 +308,15 @@
       <table>
         <thead>
           <tr>
-            <th style="width:23%">标题</th>
-            <th style="width:26%">别名（命中用）</th>
-            <th style="width:15%">标签</th>
+            <th style="width:17%">标题</th>
+            <th style="width:19%">别名（命中用）</th>
+            <th style="width:11%">标签</th>
+            <th style="width:17%">站点关键词</th>
             <th>摘要</th>
-            <th style="width:132px"></th>
+            <th style="width:112px"></th>
           </tr>
         </thead>
-        <tbody id="list-body"><tr><td colspan="5" class="empty">读着…</td></tr></tbody>
+        <tbody id="list-body"><tr><td colspan="6" class="empty">读着…</td></tr></tbody>
       </table>
     </div>
     <div class="pager" id="list-pager"></div>

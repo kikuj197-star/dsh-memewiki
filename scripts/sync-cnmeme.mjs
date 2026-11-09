@@ -149,7 +149,7 @@ async function 取JSON(路径, 重试 = 4) {
   throw new Error('重试次数用尽')
 }
 
-/** 翻完全部公开词条列表 */
+/** 翻完全部公开词条列表（顺带收下站点给的关键词，不用额外请求） */
 async function 扫列表() {
   const 全部 = []
   let offset = 0
@@ -159,7 +159,14 @@ async function 扫列表() {
     const 数据 = await 取JSON(`?limit=30&offset=${offset}`)
     const 条 = 数据.items || []
     if (!条.length) break
-    for (const it of 条) 全部.push({ slug: it.slug, title: it.title, updated_at: it.updated_at })
+    for (const it of 条) {
+      全部.push({
+        slug: it.slug,
+        title: it.title,
+        updated_at: it.updated_at,
+        keywords: Array.isArray(it.keywords) ? it.keywords.map(String).join(',') : String(it.keywords || ''),
+      })
+    }
     offset += 条.length
     页++
     if (页 % 25 === 0) {
@@ -188,6 +195,11 @@ function 建表(conn) {
       slug TEXT,
       site_updated_at TEXT,
       checked_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS meme_keywords (
+      title TEXT PRIMARY KEY,
+      keywords TEXT,
+      fetched_at TEXT
     );
   `)
 }
@@ -278,6 +290,26 @@ console.log(
   (只记基线.length ? `，首次建基线 ${只记基线.length} 条` : '') +
   (下架.length ? `，站点已无 ${下架.length} 条（保留）` : ''),
 )
+
+// 站点关键词：列表接口自带，不用额外请求。存一份给页面展示，也能一键加成别名。
+if (!试运行 && 站点.some((x) => x.keywords)) {
+  const 写关键词 = db.prepare('INSERT OR REPLACE INTO meme_keywords (title, keywords, fetched_at) VALUES (?, ?, ?)')
+  const 时间 = 现在文本()
+  db.exec('BEGIN')
+  try {
+    let 记下 = 0
+    for (const it of 站点) {
+      if (!it.keywords) continue
+      写关键词.run(it.title, it.keywords, 时间)
+      记下++
+    }
+    db.exec('COMMIT')
+    if (记下) console.log(`站点关键词：记下 ${记下} 条`)
+  } catch (e) {
+    try { db.exec('ROLLBACK') } catch { /* ignore */ }
+    console.warn('记关键词失败：' + (e && e.message))
+  }
+}
 
 if (!新增.length && !待处理.length) {
   // 没有要补/要改的，但站点版本基线可能还没建：顺手记下来，下次就能精确判断改动
