@@ -701,7 +701,7 @@ function 渲染抽屉(v, 新) {
       : '') +
     字段('f-tags', '标签', v.tags, '逗号或顿号隔开') +
     '<div class="form-field">' +
-      '<label for="f-summary">摘要<span class="muted" style="font-weight:400"> · 列表里显示的一行解释</span></label>' +
+      '<label for="f-summary">摘要<span class="muted" style="font-weight:400"> · 梗维基原文，可能带「来源」前缀或被站点截断</span></label>' +
       '<textarea class="textarea" id="f-summary" rows="3">' + esc(v.summary) + '</textarea>' +
     '</div>' +
     字段('f-usage', '怎么用 / 怎么接', v.usage, '模型优先看这一段', 7) +
