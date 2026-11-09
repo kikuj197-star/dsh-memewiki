@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>梗百科 · 本地管理</title>
+<style>
+  :root {
+    --bg: #0e1014;
+    --panel: #161a21;
+    --panel-2: #1b2029;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --text: #e7eaf0;
+    --muted: #98a1af;
+    --accent: #6aa9ff;
+    --accent-soft: rgba(106, 169, 255, 0.14);
+    --ok: #4fd08a;
+    --ok-soft: rgba(79, 208, 138, 0.14);
+    --warn: #ffbe5c;
+    --warn-soft: rgba(255, 190, 92, 0.14);
+    --danger: #ff7272;
+    --danger-soft: rgba(255, 114, 114, 0.13);
+    --radius: 12px;
+    --shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f9;
+      --panel: #ffffff;
+      --panel-2: #f2f4f8;
+      --line: rgba(16, 24, 40, 0.1);
+      --line-strong: rgba(16, 24, 40, 0.2);
+      --text: #1a1f28;
+      --muted: #5f6875;
+      --accent: #2f6fe4;
+      --accent-soft: rgba(47, 111, 228, 0.1);
+      --ok: #159c58;
+      --ok-soft: rgba(21, 156, 88, 0.1);
+      --warn: #b47400;
+      --warn-soft: rgba(180, 116, 0, 0.12);
+      --danger: #d64545;
+      --danger-soft: rgba(214, 69, 69, 0.1);
+      --shadow: 0 18px 48px rgba(16, 24, 40, 0.16);
+      color-scheme: light;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  ::selection { background: var(--accent-soft); }
+
+  .app { max-width: 1220px; margin: 0 auto; padding: 22px 20px 80px; }
+
+  /* ---------- 顶栏 ---------- */
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; }
+  .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .logo {
+    width: 46px; height: 46px; flex: none; border-radius: 13px; display: grid; place-items: center; font-size: 24px;
+    background: linear-gradient(140deg, var(--accent-soft), transparent); border: 1px solid var(--line-strong);
+  }
+  .brand h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: 0.2px; }
+  .brand p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+  .top-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+  /* ---------- 按钮 / 输入 ---------- */
+  .btn {
+    appearance: none; border: 1px solid var(--line-strong); background: var(--panel);
+    color: var(--text); font: inherit; font-size: 13px; padding: 8px 13px; border-radius: 9px;
+    cursor: pointer; white-space: nowrap; transition: background 0.14s, border-color 0.14s, transform 0.06s;
+  }
+  .btn:hover { background: var(--panel-2); border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { background: rgba(106, 169, 255, 0.24); }
+  .btn.ghost { background: transparent; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+  .btn.danger:hover { background: var(--danger-soft); }
+
+  .input, .select, .textarea {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px 11px; outline: none; width: 100%;
+    transition: border-color 0.14s, box-shadow 0.14s;
+  }
+  .input:focus, .select:focus, .textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .textarea { min-height: 92px; resize: vertical; line-height: 1.65; }
+  .select { cursor: pointer; }
+  .search { position: relative; flex: 1 1 260px; min-width: 180px; }
+  .search .input { padding-right: 34px; }
+  .search .clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 6px;
+  }
+  .search .clear:hover { background: var(--line); color: var(--text); }
+
+  /* ---------- 页签 ---------- */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  .tab {
+    appearance: none; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+    font: inherit; font-size: 13.5px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 7px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .badge {
+    display: inline-block; min-width: 19px; padding: 0 6px; border-radius: 20px; font-size: 11px; line-height: 18px;
+    text-align: center; background: var(--line); color: var(--muted); font-weight: 500;
+  }
+  .badge.accent { background: var(--accent-soft); color: var(--accent); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+
+  /* ---------- 通用块 ---------- */
+  .toolbar { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 17px;
+  }
+  .card + .card { margin-top: 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  .hr { height: 1px; background: var(--line); margin: 14px 0; }
+
+  /* ---------- 表格 ---------- */
+  .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 14px;
+    border-bottom: 1px solid var(--line); background: var(--panel-2); white-space: nowrap;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  td.title-cell { font-weight: 600; cursor: pointer; }
+  td.title-cell:hover { color: var(--accent); }
+  .aliases { color: var(--text); font-size: 12.5px; }
+  .aliases.none { color: var(--muted); font-style: italic; }
+  .tagline { color: var(--muted); font-size: 12px; }
+  .snippet { color: var(--muted); font-size: 12.5px; max-width: 380px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ops { display: flex; gap: 6px; justify-content: flex-end; }
+  .pager { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+  /* ---------- 补别名 ---------- */
+  .alias-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 14px; align-items: start; }
+  .alias-row .info { min-width: 0; }
+  .alias-row h3 { margin: 0 0 3px; font-size: 14.5px; font-weight: 650; }
+  .alias-row .preview { color: var(--muted); font-size: 12.5px; margin: 2px 0 6px; }
+  .alias-input-wrap { display: flex; gap: 7px; }
+  .alias-input-wrap .input { flex: 1; }
+  .alias-row.saved { opacity: 0.55; }
+  .alias-row.saved .alias-input-wrap::after { content: "已存"; color: var(--ok); font-size: 12px; align-self: center; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+  .chip {
+    font-size: 11.5px; padding: 2px 9px; border-radius: 20px; border: 1px dashed var(--line-strong);
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
+  .list-rows { display: flex; flex-direction: column; }
+  .list-rows > * + * { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+
+  /* ---------- 审核 ---------- */
+  .sync-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.running { background: var(--warn); animation: pulse 1.1s infinite; }
+  .dot.done { background: var(--ok); }
+  .dot.error { background: var(--danger); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .log {
+    margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 10px 12px; max-height: 170px; overflow: auto; font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px; line-height: 1.7; color: var(--muted); white-space: pre-wrap; word-break: break-all;
+  }
+  .review-item { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+  .review-item + .review-item { margin-top: 12px; }
+  .review-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 13px 16px; cursor: pointer; }
+  .review-head h3 { margin: 0; font-size: 14.5px; font-weight: 650; }
+  .review-meta { color: var(--muted); font-size: 11.5px; }
+  .review-body { padding: 0 16px 15px; border-top: 1px solid var(--line); }
+  .field-block { margin-top: 13px; }
+  .field-label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } .alias-row { grid-template-columns: 1fr; } }
+  .side { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+  .side.pick { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .side-head {
+    display: flex; align-items: center; gap: 8px; padding: 7px 11px; font-size: 12px; font-weight: 600;
+    border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 70%, transparent);
+  }
+  .side-head input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+  .side pre {
+    margin: 0; padding: 10px 11px; font-family: inherit; font-size: 12.5px; line-height: 1.68;
+    white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto;
+  }
+  .side pre em { color: var(--muted); font-style: normal; }
+  .review-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px; flex-wrap: wrap; }
+  .diff-add { color: var(--ok); }
+  .diff-del { color: var(--danger); text-decoration: line-through; opacity: 0.7; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 11px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-size: 21px; font-weight: 650; margin-top: 3px; letter-spacing: 0.3px; }
+
+  /* ---------- 抽屉 ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.42); backdrop-filter: blur(1.5px);
+    opacity: 0; pointer-events: none; transition: opacity 0.18s; z-index: 40;
+  }
+  .overlay.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--bg);
+    border-left: 1px solid var(--line-strong); box-shadow: var(--shadow); transform: translateX(100%);
+    transition: transform 0.2s ease; z-index: 41; display: flex; flex-direction: column;
+  }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .drawer-head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .drawer-body { padding: 18px 20px 26px; overflow: auto; flex: 1; }
+  .drawer-foot { display: flex; gap: 9px; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .form-field { margin-bottom: 13px; }
+  .form-field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+  .form-field label b { color: var(--text); font-weight: 600; }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; line-height: 1.6; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 18px); z-index: 60;
+    background: var(--panel); border: 1px solid var(--line-strong); color: var(--text); padding: 10px 16px;
+    border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; opacity: 0; pointer-events: none;
+    transition: opacity 0.18s, transform 0.18s; max-width: min(560px, 90vw);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.err { border-color: var(--danger); color: var(--danger); }
+  #toast.ok { border-color: var(--ok); }
+
+  .kbd { font-size: 11px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 5px; color: var(--muted); }
+  .hidden { display: none !important; }
+  details { border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px; background: var(--panel-2); }
+  details > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  details[open] > summary { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo">🐳</div>
+      <div>
+        <h1>梗百科 · 本地管理</h1>
+        <p id="sub">正在读词库…</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="btn-sync-new" title="只把站点上的新词条补进来">同步新增</button>
+      <button class="btn primary" id="btn-check" title="扫一遍站点，把有改动的词条排进审核区">检查站点改动</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="list">词条库 <span class="badge" id="badge-total">0</span></button>
+    <button class="tab" data-tab="alias">补别名 <span class="badge warn" id="badge-noalias">0</span></button>
+    <button class="tab" data-tab="review">改动审核 <span class="badge accent" id="badge-pending">0</span></button>
+    <button class="tab" data-tab="status">状态与说明</button>
+  </nav>
+
+  <!-- ============ 词条库 ============ -->
+  <section id="tab-list">
+    <div class="toolbar">
+      <div class="search">
+        <input class="input" id="list-q" placeholder="搜标题 / 别名 / 标签 / 摘要（回车搜索）" autocomplete="off" />
+        <button class="clear hidden" id="list-clear" title="清空">✕</button>
+      </div>
+      <select class="select" id="list-filter" style="width:auto">
+        <option value="全部">全部词条</option>
+        <option value="无别名">只看没别名的</option>
+        <option value="有别名">只看有别名的</option>
+        <option value="多别名">多个别名（命中面宽）</option>
+        <option value="有改动">站点有改动待审核</option>
+      </select>
+      <select class="select" id="list-sort" style="width:auto">
+        <option value="title">按标题</option>
+        <option value="alias">别名多的先</option>
+      </select>
+      <button class="btn primary" id="btn-new">＋ 新建词条</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:23%">标题</th>
+            <th style="width:26%">别名（命中用）</th>
+            <th style="width:15%">标签</th>
+            <th>摘要</th>
+            <th style="width:132px"></th>
+          </tr>
+        </thead>
+        <tbody id="list-body"><tr><td colspan="5" class="empty">读着…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="list-pager"></div>
+  </section>
+
+  <!-- ============ 补别名 ============ -->
+  <section id="tab-alias" class="hidden">
+    <div class="card">
+      <div class="row">
+        <div>
+          <div style="font-weight:650">给没有别名的词条补上俗称、缩写、口头禅</div>
+          <div class="muted small" style="margin-top:3px">
+            插件查词时会拿整句去比对别名，别名越贴近群里真实说法，命中率越高。别名用逗号隔开。
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <span class="badge warn" id="alias-left">0 条待补</span>
+      </div>
+    </div>
+
+    <div class="toolbar" style="margin-top:14px">
+      <div class="search">
+        <input class="input" id="alias-q" placeholder="在这批无别名词条里搜标题（回车）" autocomplete="off" />
+        <button class="clear hidden" id="alias-clear" title="清空">✕</button>
+      </div>
+      <button class="btn" id="alias-random">🎲 随机 20 条</button>
+      <button class="btn ghost" id="alias-bulk-toggle">批量粘贴</button>
+    </div>
+
+    <div class="card hidden" id="alias-bulk">
+      <div style="font-weight:600;margin-bottom:6px">批量补别名</div>
+      <div class="muted small" style="margin-bottom:9px">
+        一行一条，格式 <code>标题 | 别名1,别名2</code>（竖线也能用 <code>=&gt;</code> 或 <code>:=</code>）。标题要跟词库里完全一致，认不出的会列出来。
+      </div>
+      <textarea class="textarea" id="alias-bulk-text" placeholder="康神开播了 | kskbl,康神
+杰哥不要啊 | 这个彬彬就是逊,我家还蛮大的"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="alias-bulk-run">导入</button>
+        <span class="muted small" id="alias-bulk-log"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="list-rows" id="alias-list"><div class="empty">读着…</div></div>
+    </div>
+    <div class="pager" id="alias-pager"></div>
+  </section>
+
+  <!-- ============ 改动审核 ============ -->
+  <section id="tab-review" class="hidden">
+    <div class="card">
+      <div class="sync-state">
+        <span class="dot" id="sync-dot"></span>
+        <b id="sync-title">同步状态</b>
+        <span class="muted" id="sync-detail"></span>
+        <div class="spacer"></div>
+        <button class="btn sm" id="btn-check2">检查站点改动</button>
+        <button class="btn sm ghost" id="btn-force" title="连上次构建以来站点改过的老词条也全部列出来">强制全量比对</button>
+        <button class="btn sm ghost" id="btn-sync-new2">同步新增</button>
+      </div>
+      <div class="log hidden" id="sync-log"></div>
+      <div class="hint">
+        检查只把站点改过的内容放进下面的审核区，<b>不会自动覆盖</b>你本地手改过的正文；新词条则直接补进来。
+        每张卡片左边是本地现状、右边是站点最新，逐项挑要哪边再合并。<br />
+        第一次检查只给每条词条记下「站点版本」（建基线），之后站点真改了才会排队；想立刻看「上次构建以来站点改过什么」就点「强制全量比对」。
+      </div>
+    </div>
+
+    <div class="toolbar" style="margin-top:16px">
+      <span class="badge accent" id="review-count">0 条待审核</span>
+      <select class="select" id="review-filter" style="width:auto">
+        <option value="pending">待审核</option>
+        <option value="applied">已合并</option>
+        <option value="rejected">已忽略</option>
+      </select>
+      <label class="muted small row" style="gap:6px;cursor:pointer">
+        <input type="checkbox" id="review-show-unchanged" /> 显示未改动的字段
+      </label>
+      <div class="spacer"></div>
+      <button class="btn sm" id="review-expand">全部展开</button>
+      <button class="btn sm ghost" id="review-collapse">全部收起</button>
+      <button class="btn sm danger" id="review-ignore-all">全部忽略</button>
+    </div>
+
+    <div id="review-list"><div class="empty">还没有待审核的改动。点上面的「检查站点改动」。</div></div>
+    <div class="pager" id="review-pager"></div>
+  </section>
+
+  <!-- ============ 状态 ============ -->
+  <section id="tab-status" class="hidden">
+    <div class="stat-grid" id="status-grid"></div>
+
+    <div class="card" style="margin-top:14px">
+      <div style="font-weight:600;margin-bottom:8px">词库文件</div>
+      <div class="muted small" id="status-paths"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btn-export-json">导出 JSON 备份</button>
+        <button class="btn" id="btn-export-csv">导出 CSV</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:8px">这个页面怎么用</div>
+      <div class="small muted" style="line-height:1.95">
+        1. <b>补别名</b> 最划算：词条只有标题时，消息里换个说法就查不到。把群里的俗称、缩写、口头禅填进别名，命中率立刻不一样。<br />
+        2. <b>词条库</b> 能改标题、标签、用法、出处、摘要，改完下一轮对话就生效（插件读的是同一个 memes.db）。<br />
+        3. <b>检查站点改动</b> 会扫一遍 cnmeme.wiki：新词条直接补进来，老词条的改动排进审核区，逐项挑要哪边再合并。<br />
+        4. 合并时别名默认取<b>并集</b>——你手填的别名不会被站点内容冲掉。<br />
+        5. 关掉这个页面不影响 QQ 那边用词库；下次要改再启动一次。
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:8px">数据来源</div>
+      <div class="small muted" style="line-height:1.9">
+        词条来自 <a href="https://cnmeme.wiki" target="_blank" rel="noopener noreferrer">梗维基 cnmeme.wiki</a> 的公开 API。
+        本地改动只在你自己的 <code>data/memes.db</code> 里，不会自动传回站点；想回馈站点，去 DSH 设置页「梗百科 → 词条库」点「上传」。
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h2 id="drawer-title">编辑词条</h2>
+    <div class="spacer"></div>
+    <button class="btn sm ghost" id="drawer-close">关闭</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+  <div class="drawer-foot" id="drawer-foot"></div>
+</aside>
+
+<div id="toast"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

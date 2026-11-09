@@ -1,35 +1,42 @@
 dsh-memewiki
 ============
 
-本项目的灵感来自 AstrBot 插件 astrbot_plugin_memewiki。感谢原作者 in1t1a1。
+这是对 AstrBot 插件 astrbot_plugin_memewiki 的 DSH（DeepSeek Harness）移植版本。
 
-致谢
-----
+原项目
+------
 - 名称：astrbot_plugin_memewiki
-- 作者：in1t1a1（感谢提供的灵感）
-- 状态：原仓库已删除（404），这里不再挂链接
+- 作者：in1t1a1
+- 地址：原仓库已删除（404），这里不再放链接
 - 许可：见原仓库
 
 词库数据
 --------
-- 文件：data/memes.db（6792 条）
-- 来源：最初 6668 条来自原项目随包分发的词库，数据由 cnmeme.wiki 整理；
-  2026-11-03 从 cnmeme.wiki 公开 API 同步增补 29 条、修订 5 条
-- 构建时间：2026-10-26；最近同步：2026-11-03
+- 文件：data/memes.db（6853 条）
+- 来源：最初 6668 条来自原仓库随包分发的词库，数据由 cnmeme.wiki 整理；
+  之后多次从 cnmeme.wiki 公开 API 同步增补
+- 构建时间：2026-10-26；最近同步：2026-11-09（6798 → 6853，新增 55 条）
 
-本项目的实现
-------------
+本移植版做了哪些改动
+--------------------
 见 README.md 的「与原版的差异」一节。简述：
 
-1. 运行环境是 DSH 插件（Node.js ESM，零依赖），不是 AstrBot。
-2. 词库用 Node 22.13+ 自带的 node:sqlite，只读打开，不需要额外依赖。
-3. 预查注入走 DSH 的 systemPrompt.context。
-4. 有设置页：词条增删改查、词条总数、「自动思考梗」开关、检查更新。
-5. 有匹配层：标题包含查询词（查询 ≥3 字时启用），解决短查询查不到长标题的问题。
-6. 预查注入不联网；「更新词库」「提交新词条」是显式动作，点了才连 cnmeme.wiki。
-7. 没有做：/梗 图片卡片（Pillow）、/黑话 命令、AstrBot WebUI 面板。
+1. 运行环境从 AstrBot（Python）重写为 DSH 插件（Node.js ESM，零依赖）。
+2. 词库改用 Node 22.13+ 自带的 node:sqlite，只读打开，不需要额外依赖。
+3. 预查注入从 AstrBot 的 on_llm_request 临时文本改为 DSH 的 systemPrompt.context。
+4. 新增设置页：词条增删改查、词条总数、「自动思考梗」开关。
+5. 新增匹配层：标题包含查询词（查询 ≥3 字时启用），解决短查询查不到长标题的问题。
+6. 去除联网兜底（cnmeme.wiki API），只走本地词库，避免把聊天片段发往第三方。
+7. 未移植：/梗 图片卡片（Pillow）、/黑话 命令、AstrBot WebUI 面板。
 
 许可说明
 --------
-本仓库代码以 MIT 许可发布。词库数据（data/memes.db）版权归原项目与 cnmeme.wiki，
+本仓库代码以 MIT 许可发布。词库数据（data/memes.db）版权归原作者与 cnmeme.wiki，
 本项目仅做格式适配与读取，不主张其版权。
+
+本仓库
+------
+- 地址：https://github.com/kikuj197-star/dsh-memewiki
+- 上游：https://github.com/thawline/dsh-memewiki （MIT，dsh-memewiki 的 DSH 插件版）
+- 相对上游的改动：v0.2.0 起加了本地管理页（补别名、词条增删改、站点改动人工审核合并）
+  与同步的 --stage 模式，并把词库同步到 6853 条。详见 README 与 CHANGELOG。

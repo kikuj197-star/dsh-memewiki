@@ -2,16 +2,18 @@
 
 给 [DSH](https://dsh.deepseek.com) 用的**梗百科 / 黑话词典**插件。
 
-> ⚠️ **这是 DSH 插件，不是 AstrBot 插件。** 仓库里出现 `astrbot_plugin_memewiki` 字样，只是因为本项目的灵感来自那个 AstrBot 插件；装进 AstrBot 里不会生效。
+> ⚠️ **这是 DSH 插件，不是 AstrBot 插件。** 仓库里出现 `astrbot_plugin_memewiki` 字样，只是因为它是从那个 AstrBot 插件移植来的；装进 AstrBot 里不会生效。
 
-致谢：灵感来自 AstrBot 插件 `astrbot_plugin_memewiki`（作者 in1t1a1），谢谢原作者提供的灵感。原仓库已删除，这里不放链接。
+> 🍴 本仓库是 [thawline/dsh-memewiki](https://github.com/thawline/dsh-memewiki) 的 fork。上游的词库、匹配逻辑、注入策略原样保留；0.2.0 起在这里加了**本地管理页**（补别名 / 站点改动人工审核合并）和同步的 `--stage` 模式，另外补了 2026-11-09 的词条。
 
-内置 6792 条网络梗词条，查词离线可用、零依赖（只用 Node 自带的 `node:sqlite`）。
+来源：AstrBot 插件 `astrbot_plugin_memewiki`（作者 in1t1a1）。原仓库已删除，所以这里不放链接——如果有人点进来发现 404，那是那个仓库，不是这个。
+
+内置 6853 条网络梗词条，查词离线可用、零依赖（只用 Node 自带的 `node:sqlite`）。
 
 当你问一句「XX 是什么梗」时，它会在模型看到这句话**之前**就把对应词条查好塞进上下文，让模型直接接梗；同时提供一个 `search_meme_wiki` 工具，让模型自己想查的时候也能查。
 
 > 作者：[@thawline](https://github.com/thawline)
-> 致谢：灵感来自 AstrBot 插件 `astrbot_plugin_memewiki`（原仓库已删除），感谢原作者
+> 来源：AstrBot 插件 `astrbot_plugin_memewiki`（AstrBot 版，原仓库已删除）
 
 
 ## 特性
@@ -46,7 +48,7 @@
 在 profile 目录（通常是 `C:\Users\<你>\.dsh\profiles\desktop`）下执行：
 
 ```bash
-pnpm add github:thawline/dsh-memewiki
+pnpm add github:kikuj197-star/dsh-memewiki
 ```
 
 或者把仓库 clone 到本地，再用 `link:` 引用。
@@ -89,7 +91,12 @@ CREATE TABLE memes (
 );
 ```
 
-词库来自 [cnmeme.wiki](https://cnmeme.wiki) 的公开 API（来源、用法、标签、别名与摘要），2026-11-05 同步至 **6792 条**，对应站点当前的公开词条。最初 6668 条来自原版插件随包分发的 `data/memes.db`（2026-10-26 构建）。
+词库来自 [cnmeme.wiki](https://cnmeme.wiki) 的公开 API（来源、用法、标签、别名与摘要），2026-11-09 同步至 **6853 条**（站点 6847 条公开词条），对应站点当前的公开词条。最初 6668 条来自原版插件随包分发的 `data/memes.db`（2026-10-26 构建）。
+
+同步脚本会自动建两张辅助表，查词不读它们，删掉也会自动重建：
+
+- `meme_pending`：站点改动的待审核区（含站点关键词 `keywords`，可一键加成别名）；
+- `meme_site_state`：每条词条上次见到的站点版本，用来判断「这条到底改没改」。
 
 ### 更新词库
 
@@ -99,17 +106,41 @@ CREATE TABLE memes (
 node scripts/sync-cnmeme.mjs               # 补新词条 + 同步被站点改过的词条
 node scripts/sync-cnmeme.mjs --dry-run     # 只报告会改什么，不写库
 node scripts/sync-cnmeme.mjs --no-existing # 只补新词条，不动已有条目
+node scripts/sync-cnmeme.mjs --stage       # 补新词条 + 把站点改动排进「待审核区」，不覆盖正文
+node scripts/sync-cnmeme.mjs --stage --force # 同上，连上次构建以来改过的老词条也全部列出来
 ```
 
-脚本会先翻完全站公开列表（约 4–5 分钟），再只拉有变化的详情；写库前自动备份成 `data/memes.db.bak-时间戳`。你在设置页手动填的 `aliases` 不会被冲掉，正文为空时也保留本地旧值。跑完 `meta.built_at` / `count` 会更新，设置页的总条数跟着变。
+脚本会先翻完全站公开列表（约 4–5 分钟），再只拉有变化的详情；写库前自动备份成 `data/memes.db.bak-时间戳`。你在设置页手动填的 `aliases` 不会被冲掉，正文为空时也保留本地旧值。默认模式跑完 `meta.built_at` / `count` 会更新；`--stage` 只更新 `count` 和 `checked_at`（`built_at` 留着当比对基准）。
 
 不想开终端的话，直接在 DSH 设置页 → 插件 → 梗百科点「更新词库」：后台跑的是 `--no-existing`（只加新词条），页面上会显示同步进度和结果，跑完条数自动刷新。按钮不经过模型，零 token。
 
+## 本地管理页
+
+设置页里改词条够用，但要批量补别名、逐条审核站点改动，单独开一个网页更顺手：
+
+```bash
+node scripts/wiki-server.mjs                 # 默认 http://127.0.0.1:3917，自动开浏览器
+node scripts/wiki-server.mjs --port 4000     # 换端口
+node scripts/wiki-server.mjs --no-open       # 不自动开浏览器
+node scripts/wiki-server.mjs --db D:\path\to\memes.db
+```
+
+Windows 上直接双击 `scripts/open-wiki.cmd` 也行。它只监听 `127.0.0.1`、不开外网，关掉窗口就停；读的是插件自己的 `data/memes.db`，改完下一轮对话立刻生效。零依赖，只要 Node ≥ 22.13。
+
+四个页签：
+
+- **词条库**：搜、看、增删改（标题 / 别名 / 标签 / 摘要 / 用法 / 出处 / 其他），能按「只看没别名的」「站点有改动」筛，标题也能改。
+- **补别名**：最划算的一栏。AI 收集来的词条大多只有标题，群里换个说法就查不到；这里一页一页补俗称、缩写、口头禅，回车存完自动跳下一条，也可以「标题 | 别名1,别名2」批量粘贴导入。
+- **改动审核**：点「检查站点改动」扫一遍 cnmeme.wiki。**新词条直接补进本地**；**被站点改过的已有词条排进审核区**，左边本地、右边站点，逐项挑要哪边再合并，别名默认取并集（手填的别名不会被冲掉）。第一次检查只给每条词条记下站点版本（建基线），之后站点真改了才会排队；想立刻看「上次构建以来改过什么」就点「强制全量比对」。
+- **状态与说明**：条数、无别名数、待审核数、词库路径、上次构建 / 上次检查时间，还能导出 JSON / CSV 备份。
+
+> 同步走站点公开 API，只在你点按钮时联网，不经过模型、不烧 token；关掉页面不影响 QQ 那边继续用词库。
+
 ## 与原版的差异
 
-本插件是一次**独立实现**，不是逐行翻译。AstrBot 是 Python 的 Star 插件框架，DSH 是 Node.js 的插件体系，外壳必须重写；词库、匹配逻辑、预查闸门、注入文案这些设计受原版启发。
+本插件是**重构移植**，不是逐行翻译。AstrBot 是 Python 的 Star 插件框架，DSH 是 Node.js 的插件体系，外壳必须重写；词库、匹配逻辑、预查闸门、注入文案沿用原版的设计。
 
-| 能力 | 参考的 AstrBot 版 `astrbot_plugin_memewiki` | 本插件 `dsh-memewiki` |
+| 能力 | 原版 `astrbot_plugin_memewiki` | 本插件 `dsh-memewiki` |
 | --- | --- | --- |
 | 运行环境 | AstrBot（Python） | DSH（Node.js，ESM，零依赖） |
 | 词库读取 | SQLite（`sqlite3`） | `node:sqlite`（Node ≥ 22.13 自带） |
@@ -126,17 +157,15 @@ node scripts/sync-cnmeme.mjs --no-existing # 只补新词条，不动已有条�
 | 预查闸门 | 本地精确 → 像梗才联网 → 同词节流 → 缓存 | 本地匹配 + 像梗判断（问梗句式 / 裸词 / 停用词） |
 | 黑话自建 | `/黑话 词 释义` 命令 | 设置页新增词条（等价，但走界面） |
 
-### 关于联网
+### 为什么去掉联网兜底
 
-**预查注入永远不联网。** 原版在本地查不到时会去 cnmeme.wiki 搜；这里没有做，原因：
+原版在本地查不到时会去 `cnmeme.wiki` 搜。移植时去掉了，原因：
 
 1. **隐私**：联网意味着把用户的聊天片段发到第三方，梗查询往往带着上下文；
 2. **稳定**：外部 API 挂了就多一次失败路径，还要处理超时、缓存、节流；
-3. **够用**：6792 条覆盖了绝大多数常见梗，查不到时模型说「不知道」比编一个更安全。
+3. **够用**：6853 条覆盖了绝大多数常见梗，查不到时模型说「不知道」比编一个更安全。
 
 需要联网版的话，可以在设置页把「自动思考梗」关掉，改用 `search_meme_wiki` 工具自行决定何时查（工具同样只查本地库）。
-
-另外有两个**显式**的联网动作：设置页的「更新词库」和「提交新词条」。这两个只在你点了之后才连一次 cnmeme.wiki，平时不跑。
 
 ## 已知限制
 
@@ -146,4 +175,4 @@ node scripts/sync-cnmeme.mjs --no-existing # 只补新词条，不动已有条�
 
 ## 许可
 
-MIT。词库数据版权归原项目与 cnmeme.wiki；本项目仅做格式适配，功能设计受原版启发，详见 `NOTICE`。
+MIT。词库数据版权归原作者与 cnmeme.wiki；本项目仅做格式适配与功能移植，详见 `NOTICE`。
