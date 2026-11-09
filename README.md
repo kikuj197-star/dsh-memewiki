@@ -99,7 +99,14 @@ CREATE TABLE memes (
 - `meme_site_state`：每条词条上次见到的站点版本，用来判断「这条到底改没改」；
 - `meme_keywords`：站点给每个词条的检索词（`keywords`），管理页里展示、也能一键加进别名。梗维基的 `summary` 会带「来源 …」前缀、偶尔被截断，那是站点原文，不是本地生成的。
 
-> `data/memes.db` 在仓库里是一份**快照**，装完就能用。你在本地补的别名会直接写进这个文件，所以 `git status` 里它会一直显示「已修改」：想发布新快照就 `git add data/memes.db && git commit && git push`；不想把本地别名公开，可以 `git update-index --skip-worktree data/memes.db`，本地照常读写，提交时忽略它。
+> 📦 **仓库自带的 `data/memes.db` 只是示例库**：里面的别名、关键词、摘要改动是本地编辑的痕迹，内容也可能落后于站点。不想用示例数据的话，删掉它、让脚本从梗维基全量重建（词库不存在时会自动新建空库）：
+>
+> ```bash
+> rm data/memes.db                          # Windows: del data\memes.db
+> node scripts/sync-cnmeme.mjs --stage      # 全站 6800+ 条详情，限速拉取，约 2–3 小时
+> ```
+>
+> 重建后日常只用增量同步（几分钟）。示例库连着 `git` 的话，也可以用 `git update-index --skip-worktree data/memes.db` 让本地改动不参与提交。
 
 ### 站点内容 → 本地字段
 

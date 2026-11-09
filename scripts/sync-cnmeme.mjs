@@ -20,7 +20,7 @@
  * 已有词条的 aliases 不会被冲掉（本地填过的优先）；正文为空时保留本地旧值。
  * meme_pending 里额外记了站点的 keywords，网页上可以一键加成别名。
  */
-import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -203,7 +203,13 @@ async function 扫列表() {
 // ---------- 待审核区 / 站点版本基线 ----------
 
 function 建表(conn) {
+  // 词库文件被删掉也能从零重建：memes / meta 跟查词用的 schema 一致
   conn.exec(`
+    CREATE TABLE IF NOT EXISTS memes (
+      title TEXT PRIMARY KEY, slug TEXT, tags TEXT, usage TEXT, origin TEXT,
+      other TEXT, summary TEXT, aliases TEXT
+    );
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS meme_pending (
       title TEXT PRIMARY KEY,
       slug TEXT, tags TEXT, usage TEXT, origin TEXT, other TEXT, summary TEXT,
@@ -236,9 +242,12 @@ function 现在文本(带日期 = true) {
 
 const 开始时间 = Date.now()
 
-if (!existsSync(词库文件)) {
-  console.error('没找到词库：' + 词库文件)
-  process.exit(1)
+// 词库文件不存在就新建一个空库：这样「删掉示例库、直接从站点重建」也是一条命令
+const 新建 = !existsSync(词库文件)
+if (新建) {
+  try { mkdirSync(dirname(词库文件), { recursive: true }) } catch { /* ignore */ }
+  console.log('词库不存在，新建一个空库：' + 词库文件)
+  console.log('（这次会把站点的词条**全量**拉下来，几千条详情，大概 2–3 小时）')
 }
 
 const db = new DatabaseSync(词库文件)
@@ -396,9 +405,12 @@ for (let i = 0; i < 目标.length; i++) {
   await 等待(250)
 }
 
-// 写库前备份
-const 备份 = join(根目录, 'data', `memes.db.bak-${现在文本(false)}`)
-copyFileSync(词库文件, 备份)
+// 写库前备份（新库没什么可备份的，跳过）
+let 备份 = ''
+if (!新建) {
+  备份 = join(根目录, 'data', `memes.db.bak-${现在文本(false)}`)
+  copyFileSync(词库文件, 备份)
+}
 
 let 插入数 = 0
 let 待审数 = 0
@@ -495,7 +507,8 @@ try {
 
   const 总数 = db.prepare('SELECT COUNT(*) AS n FROM memes').get().n
   db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('checked_at', ?)").run(现在文本())
-  if (!待审核模式) {
+  if (!待审核模式 || 新建) {
+    // 全量新建 / 直接更新：这次内容就是最新的，把 built_at 推到当前
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('built_at', ?)").run(现在文本())
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('count', ?)").run(String(总数))
   } else {
@@ -512,7 +525,7 @@ try {
     console.log(`\n完成：${本地数} → ${总数} 条（新增 ${插入数}，更新 ${更新数}${抓取失败 ? `，失败 ${抓取失败}` : ''}）`)
     if (更新过的.length) console.log('更新：' + 更新过的.join('、'))
   }
-  console.log('备份：' + 备份)
+  if (备份) console.log('备份：' + 备份)
   console.log(`耗时 ${((Date.now() - 开始时间) / 1000).toFixed(0)} 秒`)
   console.log('SYNC_RESULT ' + JSON.stringify({
     mode: 待审核模式 ? 'stage' : 只加新条 ? 'new' : 'update',

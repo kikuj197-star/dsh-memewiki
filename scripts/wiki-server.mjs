@@ -49,7 +49,9 @@ const 版本 = (() => {
 
 if (!existsSync(词库文件)) {
   console.error('没找到词库：' + 词库文件)
-  console.error('用 --db 指定 memes.db 的路径。')
+  console.error('想从站点的公开 API 重建，就跑（词库不存在会自动新建并全量下载）：')
+  console.error('  node scripts/sync-cnmeme.mjs --stage')
+  console.error('或者用 --db 指定别的 memes.db。')
   process.exit(1)
 }
 
