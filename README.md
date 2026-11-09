@@ -98,6 +98,8 @@ CREATE TABLE memes (
 - `meme_pending`：站点改动的待审核区（含站点关键词 `keywords`，可一键加成别名）；
 - `meme_site_state`：每条词条上次见到的站点版本，用来判断「这条到底改没改」。
 
+> `data/memes.db` 在仓库里是一份**快照**，装完就能用。你在本地补的别名会直接写进这个文件，所以 `git status` 里它会一直显示「已修改」：想发布新快照就 `git add data/memes.db && git commit && git push`；不想把本地别名公开，可以 `git update-index --skip-worktree data/memes.db`，本地照常读写，提交时忽略它。
+
 ### 更新词库
 
 梗是会长出来的。想再同步一次，跑（需要联网，只读站点的公开 API）：
