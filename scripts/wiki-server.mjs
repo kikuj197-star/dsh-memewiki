@@ -182,6 +182,34 @@ function 主机合法(req, 服务器端口) {
 
 const 词条字段 = ['slug', 'tags', 'usage', 'origin', 'other', 'summary', 'aliases']
 
+/** 摘要留空时的兜底：从「怎么用 / 出处 / 其他」里截第一段，纯本地规则，不调模型 */
+function 自动摘要(体) {
+  const 首段 = (文) => {
+    const 块 = String(文 || '').split(/\n{2,}/).map((x) => x.trim()).filter(Boolean)
+    for (const b of 块) {
+      const 行 = b.split('\n').map((x) => x.trim()).filter(Boolean)
+        .map((x) => x.replace(/^[-*+]\s+/, '').replace(/^#+\s*/, '').trim())
+        .filter(Boolean)
+      if (!行.length) continue
+      // other 的每块第一行可能是「演化」这种小节名，太短就取下一行
+      if (行.length > 1 && 行[0].length < 8) return 行[1]
+      return 行[0]
+    }
+    return ''
+  }
+  let 文本 = 首段(体.usage) || 首段(体.origin) || 首段(体.other) || ''
+  文本 = 文本.replace(/\s+/g, ' ').trim()
+  if (!文本) return ''
+  const 上限 = 200
+  if (文本.length <= 上限) return 文本
+  const 区段 = 文本.slice(0, 上限)
+  const 断点 = Math.max(
+    区段.lastIndexOf('。'), 区段.lastIndexOf('！'), 区段.lastIndexOf('？'), 区段.lastIndexOf('；'),
+  )
+  if (断点 >= 100) return 文本.slice(0, 断点 + 1)
+  return 文本.slice(0, 上限) + '…'
+}
+
 /** 关键词跟着词条走：传了就以传的为准（空则删掉），没传就保留；改标题时一起搬 */
 function 应用关键词(标题, 原标题, 体) {
   const db = 开库()
@@ -223,6 +251,17 @@ function 保存词条(体) {
   // 允许只有标题的词条：AI 收集来的词条很多先只有标题，别名可以以后再补
   const 取 = (k) => (体[k] !== undefined ? String(体[k] ?? '') : String((旧行 && 旧行[k]) || ''))
   const 别名字段 = 体.aliases !== undefined ? 规整列表(体.aliases) : String((旧行 && 旧行.aliases) || '')
+
+  // 摘要留空就自动生成（页面上的「自动生成」按钮是同一个规则，能先预览）
+  let 摘要值 = 体.summary !== undefined ? String(体.summary ?? '').trim() : String((旧行 && 旧行.summary) || '')
+  let 自动摘要过 = false
+  if (!摘要值) {
+    const 生成 = 自动摘要({ usage: 取('usage'), origin: 取('origin'), other: 取('other') })
+    if (生成) {
+      摘要值 = 生成
+      自动摘要过 = true
+    }
+  }
   let slug
   if (体.slug !== undefined && String(体.slug).trim()) slug = String(体.slug).trim()
   else {
@@ -234,21 +273,21 @@ function 保存词条(体) {
   if (改名) {
     db.prepare(
       'UPDATE memes SET title = ?, slug = ?, tags = ?, usage = ?, origin = ?, other = ?, summary = ?, aliases = ? WHERE title = ?',
-    ).run(标题, slug, 取('tags'), 取('usage'), 取('origin'), 取('other'), 取('summary'), 别名字段, 原标题)
+    ).run(标题, slug, 取('tags'), 取('usage'), 取('origin'), 取('other'), 摘要值, 别名字段, 原标题)
     // 待审核区里的标题跟着走；站点版本基线也一起迁
     try {
       db.prepare('UPDATE meme_pending SET title = ? WHERE title = ?').run(标题, 原标题)
       db.prepare('UPDATE meme_site_state SET title = ? WHERE title = ?').run(标题, 原标题)
     } catch { /* 老库没有这两张表 */ }
     应用关键词(标题, 原标题, 体)
-    return { 状态: 200, 数据: { ok: true, title: 标题, 原标题 } }
+    return { 状态: 200, 数据: { ok: true, title: 标题, 原标题, summary: 摘要值, 自动摘要: 自动摘要过 } }
   }
 
   db.prepare(
     'INSERT OR REPLACE INTO memes (title, slug, tags, usage, origin, other, summary, aliases) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(标题, slug, 取('tags'), 取('usage'), 取('origin'), 取('other'), 取('summary'), 别名字段)
+  ).run(标题, slug, 取('tags'), 取('usage'), 取('origin'), 取('other'), 摘要值, 别名字段)
   应用关键词(标题, '', 体)
-  return { 状态: 200, 数据: { ok: true, title: 标题 } }
+  return { 状态: 200, 数据: { ok: true, title: 标题, summary: 摘要值, 自动摘要: 自动摘要过 } }
 }
 
 function 删除词条(标题原文) {
@@ -745,6 +784,10 @@ const 服务器 = createServer(async (req, res) => {
     if (方法 === 'POST' && 路由 === '/save') {
       const r = 保存词条(await 读请求体(req))
       return 发JSON(res, r.状态, r.数据)
+    }
+    if (方法 === 'POST' && 路由 === '/summarize') {
+      const 体 = await 读请求体(req)
+      return 发JSON(res, 200, { ok: true, summary: 自动摘要({ usage: 体.usage, origin: 体.origin, other: 体.other }) })
     }
     if (方法 === 'POST' && 路由 === '/delete') {
       const 体 = await 读请求体(req)

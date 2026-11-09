@@ -698,8 +698,11 @@ function 渲染抽屉(v, 新) {
     '</div>' +
     字段('f-tags', '标签', v.tags, '逗号或顿号隔开') +
     '<div class="form-field">' +
-      '<label for="f-summary">摘要<span class="muted" style="font-weight:400"> · 梗维基原文，可能带「来源」前缀或被站点截断</span></label>' +
-      '<textarea class="textarea" id="f-summary" rows="3">' + esc(v.summary) + '</textarea>' +
+      '<div class="row" style="justify-content:space-between;align-items:baseline">' +
+        '<label for="f-summary" style="margin:0">摘要<span class="muted" style="font-weight:400"> · 留空保存时自动从「怎么用 / 出处」截一段</span></label>' +
+        '<button type="button" class="btn sm ghost" id="f-autosum">自动生成</button>' +
+      '</div>' +
+      '<textarea class="textarea" id="f-summary" rows="3" placeholder="留空就行，保存时自动生成">' + esc(v.summary) + '</textarea>' +
     '</div>' +
     字段('f-usage', '怎么用 / 怎么接', v.usage, '模型优先看这一段', 7) +
     字段('f-origin', '出处 / 来历', v.origin, '', 7) +
@@ -764,6 +767,23 @@ function 渲染抽屉(v, 新) {
     提示('关键词已加进别名，记得点保存')
   })
 
+  // 摘要可以留空（保存时服务端自动生成）；这个按钮只是先给你看看长什么样
+  $('#f-autosum').addEventListener('click', async () => {
+    try {
+      const d = await 发JSON('/summarize', {
+        usage: $('#f-usage').value,
+        origin: $('#f-origin').value,
+        other: $('#f-other').value,
+      })
+      if (!d || !d.summary) { 提示('内容还太少，先补点「怎么用」或「出处」', 'err'); return }
+      $('#f-summary').value = d.summary
+      检查脏()
+      提示('摘要生成好了，不满意可以再改')
+    } catch (e) {
+      提示('生成失败：' + e.message, 'err')
+    }
+  })
+
   $('#f-save').addEventListener('click', async () => {
     const 值 = 读值()
     if (!值.title) { 提示('标题不能空', 'err'); return }
@@ -771,9 +791,13 @@ function 渲染抽屉(v, 新) {
     按钮.disabled = true
     按钮.textContent = '存着…'
     try {
-      await 发JSON('/save', 值)
+      const 结果 = await 发JSON('/save', 值)
       抽屉脏 = false
-      提示(新 ? '建好了：' + 值.title : '存好了：' + 值.title, 'ok')
+      提示(
+        (新 ? '建好了：' + 值.title : '存好了：' + 值.title) +
+        (结果 && 结果.自动摘要 ? '（摘要已自动生成）' : ''),
+        'ok',
+      )
       关抽屉()
       刷新总览()
       if (当前页签 === 'list') 载入列表()
