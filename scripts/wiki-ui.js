@@ -688,7 +688,7 @@ function 渲染抽屉(v, 新) {
     '</div>' +
     字段('f-aliases', '<b>别名</b>', v.aliases, '逗号隔开。群里的俗称、缩写、口头禅、谐音都填这里，查词命中靠它') +
     '<div class="form-field">' +
-      '<label for="f-keywords">关键词<span class="muted" style="font-weight:400"> · 梗维基的检索词，逗号隔开；下面点标签可加进别名</span></label>' +
+      '<label for="f-keywords">关键词<span class="muted" style="font-weight:400"> · 梗维基的检索词（已去掉和标签重复的），逗号隔开；下面点标签可加进别名</span></label>' +
       '<input class="input" id="f-keywords" value="' + esc((v.关键词 || []).join(',')) + '" autocomplete="off" />' +
       '<div class="chips" id="f-kw-chips"></div>' +
       '<div class="row" style="margin-top:7px">' +

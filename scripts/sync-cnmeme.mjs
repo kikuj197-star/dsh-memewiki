@@ -117,7 +117,7 @@ function 转行(item) {
     other: 其他,
     summary: 文本(item.summary),
     aliases: 列(item.aliases).join(','),
-    keywords: 列(item.keywords).join(','),
+    keywords: 去标签重复(item.keywords, item.tags).join(','),
     updated_at: 文本(item.updated_at),
   }
 }
@@ -149,6 +149,27 @@ async function 取JSON(路径, 重试 = 4) {
   throw new Error('重试次数用尽')
 }
 
+/** 关键词和标签归一比较用 */
+const 拆词 = (v) => (Array.isArray(v) ? v.map(String) : String(v ?? '').split(/[,，、]/)).map((x) => x.trim()).filter(Boolean)
+const 归一 = (s) => s.trim().toLowerCase()
+
+/**
+ * 站点给的 keywords 有时会把标签也塞进来（比如「不是哥们」的关键词是 游戏梗/情绪表达/表情包…）。
+ * 那些本来就是标签，留着只会被当成关键词展示、甚至加成别名造成误命中，所以直接去掉。
+ */
+function 去标签重复(关键词们, 标签们) {
+  const 标签集 = new Set(拆词(标签们).map(归一))
+  const 见过 = new Set()
+  const 结果 = []
+  for (const 原 of 拆词(关键词们)) {
+    const 键 = 归一(原)
+    if (!键 || 标签集.has(键) || 见过.has(键)) continue
+    见过.add(键)
+    结果.push(原)
+  }
+  return 结果
+}
+
 /** 翻完全部公开词条列表（顺带收下站点给的关键词，不用额外请求） */
 async function 扫列表() {
   const 全部 = []
@@ -164,7 +185,8 @@ async function 扫列表() {
         slug: it.slug,
         title: it.title,
         updated_at: it.updated_at,
-        keywords: Array.isArray(it.keywords) ? it.keywords.map(String).join(',') : String(it.keywords || ''),
+        tags: it.tags,
+        keywords: it.keywords,
       })
     }
     offset += 条.length
@@ -291,20 +313,21 @@ console.log(
   (下架.length ? `，站点已无 ${下架.length} 条（保留）` : ''),
 )
 
-// 站点关键词：列表接口自带，不用额外请求。存一份给页面展示，也能一键加成别名。
-if (!试运行 && 站点.some((x) => x.keywords)) {
+// 站点关键词：列表接口自带，不用额外请求。去掉和标签重复的，再存一份给页面展示。
+if (!试运行 && 站点.some((x) => 拆词(x.keywords).length)) {
   const 写关键词 = db.prepare('INSERT OR REPLACE INTO meme_keywords (title, keywords, fetched_at) VALUES (?, ?, ?)')
   const 时间 = 现在文本()
   db.exec('BEGIN')
   try {
     let 记下 = 0
     for (const it of 站点) {
-      if (!it.keywords) continue
-      写关键词.run(it.title, it.keywords, 时间)
+      const 净 = 去标签重复(it.keywords, it.tags)
+      if (!净.length) continue
+      写关键词.run(it.title, 净.join(','), 时间)
       记下++
     }
     db.exec('COMMIT')
-    if (记下) console.log(`站点关键词：记下 ${记下} 条`)
+    if (记下) console.log(`站点关键词：记下 ${记下} 条（已去掉和标签重复的）`)
   } catch (e) {
     try { db.exec('ROLLBACK') } catch { /* ignore */ }
     console.warn('记关键词失败：' + (e && e.message))
