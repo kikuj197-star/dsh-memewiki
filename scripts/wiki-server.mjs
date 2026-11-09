@@ -182,6 +182,31 @@ function 主机合法(req, 服务器端口) {
 
 const 词条字段 = ['slug', 'tags', 'usage', 'origin', 'other', 'summary', 'aliases']
 
+/** 关键词跟着词条走：传了就以传的为准（空则删掉），没传就保留；改标题时一起搬 */
+function 应用关键词(标题, 原标题, 体) {
+  const db = 开库()
+  const 给定 = 体.keywords !== undefined
+  const 值 = 给定 ? 规整列表(体.keywords) : ''
+  const 改名 = !!(原标题 && 原标题 !== 标题)
+  try {
+    if (给定) {
+      if (改名) db.prepare('DELETE FROM meme_keywords WHERE title = ?').run(原标题)
+      if (值) {
+        db.prepare('INSERT OR REPLACE INTO meme_keywords (title, keywords, fetched_at) VALUES (?, ?, ?)')
+          .run(标题, 值, 现在文本())
+      } else {
+        db.prepare('DELETE FROM meme_keywords WHERE title = ?').run(标题)
+      }
+      return
+    }
+    // 没传关键词：改标题就把原行搬过来，没改就什么都不做
+    if (改名) {
+      const 有 = db.prepare('SELECT title FROM meme_keywords WHERE title = ?').get(原标题)
+      if (有) db.prepare('UPDATE meme_keywords SET title = ? WHERE title = ?').run(标题, 原标题)
+    }
+  } catch { /* 老库没有这张表 */ }
+}
+
 function 保存词条(体) {
   const db = 开库()
   const 标题 = String(体.title ?? '').trim()
@@ -215,12 +240,14 @@ function 保存词条(体) {
       db.prepare('UPDATE meme_pending SET title = ? WHERE title = ?').run(标题, 原标题)
       db.prepare('UPDATE meme_site_state SET title = ? WHERE title = ?').run(标题, 原标题)
     } catch { /* 老库没有这两张表 */ }
+    应用关键词(标题, 原标题, 体)
     return { 状态: 200, 数据: { ok: true, title: 标题, 原标题 } }
   }
 
   db.prepare(
     'INSERT OR REPLACE INTO memes (title, slug, tags, usage, origin, other, summary, aliases) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(标题, slug, 取('tags'), 取('usage'), 取('origin'), 取('other'), 取('summary'), 别名字段)
+  应用关键词(标题, '', 体)
   return { 状态: 200, 数据: { ok: true, title: 标题 } }
 }
 
@@ -232,6 +259,7 @@ function 删除词条(标题原文) {
   if (!存在) return { 状态: 404, 数据: { ok: false, error: '没有这个词条' } }
   db.prepare('DELETE FROM memes WHERE title = ?').run(标题)
   try { db.prepare('DELETE FROM meme_pending WHERE title = ?').run(标题) } catch { /* ignore */ }
+  try { db.prepare('DELETE FROM meme_keywords WHERE title = ?').run(标题) } catch { /* ignore */ }
   return { 状态: 200, 数据: { ok: true } }
 }
 

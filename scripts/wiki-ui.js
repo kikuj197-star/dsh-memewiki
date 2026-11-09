@@ -687,18 +687,15 @@ function 渲染抽屉(v, 新) {
       '<input class="input" id="f-title" value="' + esc(v.title) + '" autocomplete="off" />' +
     '</div>' +
     字段('f-aliases', '<b>别名</b>', v.aliases, '逗号隔开。群里的俗称、缩写、口头禅、谐音都填这里，查词命中靠它') +
-    (v.关键词 && v.关键词.length
-      ? '<div class="form-field">' +
-          '<label>站点关键词<span class="muted" style="font-weight:400"> · 梗维基给的检索词，点一下加进上面的别名</span></label>' +
-          '<div class="chips">' +
-            v.关键词.map((k) => '<button type="button" class="chip" data-kw="' + esc(k) + '">+ ' + esc(k) + '</button>').join('') +
-          '</div>' +
-          '<div class="row" style="margin-top:7px">' +
-            '<button type="button" class="btn sm ghost" id="f-allkw">全部加入别名</button>' +
-            '<span class="muted small">' + v.关键词.length + ' 个关键词</span>' +
-          '</div>' +
-        '</div>'
-      : '') +
+    '<div class="form-field">' +
+      '<label for="f-keywords">关键词<span class="muted" style="font-weight:400"> · 梗维基的检索词，逗号隔开；下面点标签可加进别名</span></label>' +
+      '<input class="input" id="f-keywords" value="' + esc((v.关键词 || []).join(',')) + '" autocomplete="off" />' +
+      '<div class="chips" id="f-kw-chips"></div>' +
+      '<div class="row" style="margin-top:7px">' +
+        '<button type="button" class="btn sm ghost" id="f-allkw">全部加入别名</button>' +
+        '<span class="muted small" id="f-kw-count"></span>' +
+      '</div>' +
+    '</div>' +
     字段('f-tags', '标签', v.tags, '逗号或顿号隔开') +
     '<div class="form-field">' +
       '<label for="f-summary">摘要<span class="muted" style="font-weight:400"> · 梗维基原文，可能带「来源」前缀或被站点截断</span></label>' +
@@ -724,6 +721,7 @@ function 渲染抽屉(v, 新) {
     title: $('#f-title').value.trim(),
     原标题: v.原标题,
     aliases: 规整别名($('#f-aliases').value),
+    keywords: 规整别名($('#f-keywords').value),
     tags: $('#f-tags').value.trim(),
     summary: $('#f-summary').value.trim(),
     usage: $('#f-usage').value.trim(),
@@ -740,19 +738,28 @@ function 渲染抽屉(v, 新) {
   // 以规范化之后的值为基准，别因为别名的空格/去重被判成"改过"
   抽屉原值 = JSON.stringify(读值())
 
-  // 站点关键词：点一个加一个，或者一次全加
+  // 关键词：上面可编辑，下面实时出标签；点标签＝加进别名
   const 别名框 = $('#f-aliases')
+  const 关键词框 = $('#f-keywords')
   const 加进别名 = (词) => {
     if (!词) return
     别名框.value = 规整别名([别名框.value, 词].filter(Boolean).join(','))
     检查脏()
   }
-  for (const b of $$('#drawer-body [data-kw]')) {
-    b.addEventListener('click', () => { 加进别名(b.dataset.kw); 别名框.focus() })
+  const 刷新关键词标签 = () => {
+    const 词们 = 规整别名(关键词框.value).split(',').filter(Boolean)
+    $('#f-kw-chips').innerHTML = 词们
+      .map((k) => '<button type="button" class="chip" data-kw="' + esc(k) + '">+ ' + esc(k) + '</button>')
+      .join('')
+    $('#f-kw-count').textContent = 词们.length ? 词们.length + ' 个关键词' : '还没有关键词'
+    for (const b of $$('#f-kw-chips [data-kw]')) {
+      b.addEventListener('click', () => { 加进别名(b.dataset.kw); 别名框.focus() })
+    }
   }
-  const 全加 = $('#f-allkw')
-  if (全加) 全加.addEventListener('click', () => {
-    for (const k of (v.关键词 || [])) 加进别名(k)
+  刷新关键词标签()
+  关键词框.addEventListener('input', 刷新关键词标签)
+  $('#f-allkw').addEventListener('click', () => {
+    for (const k of 规整别名(关键词框.value).split(',').filter(Boolean)) 加进别名(k)
     别名框.focus()
     提示('关键词已加进别名，记得点保存')
   })
@@ -1031,6 +1038,11 @@ async function 启动() {
     if (参.get('filter')) { 列表.filter = 参.get('filter'); $('#list-filter').value = 列表.filter }
   } catch { /* ignore */ }
   切页签(location.hash.replace('#', '') || 'list', true)
+  // /?edit=词条名 直接打开编辑抽屉
+  try {
+    const 编辑 = new URLSearchParams(location.search).get('edit')
+    if (编辑) setTimeout(() => 开抽屉(编辑), 250)
+  } catch { /* ignore */ }
   // 上次会话可能还在同步中：接着看进度
   try {
     const s = await 取JSON('/sync')
